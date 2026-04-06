@@ -1,0 +1,120 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id              String   @id @default(cuid())
+  handle          String?  @unique
+  createdAt       DateTime @default(now())
+  
+  // Wallet binding
+  walletChain     String   @default("bsc") // "bsc" | "eth" | "sol" (future)
+  walletAddress   String   @unique
+  
+  // Profile
+  displayName     String?
+  bio             String?
+  avatarUrl       String?
+  
+  // Relations
+  posts           Post[]
+  likes           Like[]
+  comments        Comment[]
+  
+  @@map("users")
+}
+
+model Post {
+  id              String   @id @default(cuid())
+  createdAt       DateTime @default(now())
+  
+  // URL & provider
+  originalUrl     String
+  normalizedUrl   String
+  provider        String    // "youtube" | "vimeo" | "tiktok" | etc
+  providerId      String    // canonical video id for dedupe
+  title           String?
+  description     String?
+  thumbnailUrl    String?
+  embedHtml       String?
+  oembedJson      Json?
+  
+  // Ownership
+  authorId        String?   // null for anon poster
+  author          User?     @relation(fields: [authorId], references: [id])
+  
+  // Chain anchoring (Phase 2)
+  chainAnchorTx   String?   // tx hash
+  chainAnchorNet  String?   // "bsc" | "eth" | "sol"
+  licenseType     String?   // "USER_GRANT" | "CC-BY" | ...
+  licenseProof    String?   // signature / URL / doc hash
+  
+  // Aggregates
+  likeCount       Int       @default(0)
+  commentCount    Int       @default(0)
+  
+  // Relations
+  likes           Like[]
+  comments        Comment[]
+  reports         Report[]
+  
+  @@unique([provider, providerId])
+  @@map("posts")
+}
+
+model Like {
+  id          String   @id @default(cuid())
+  createdAt   DateTime @default(now())
+  
+  postId      String
+  post        Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  
+  // Either user or anon fingerprint
+  userId      String?
+  user        User?    @relation(fields: [userId], references: [id])
+  anonKey     String?  // HMAC(ip+ua)
+  
+  @@unique([postId, userId])
+  @@unique([postId, anonKey])
+  @@map("likes")
+}
+
+model Comment {
+  id          String   @id @default(cuid())
+  createdAt   DateTime @default(now())
+  
+  postId      String
+  post        Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  body        String
+  
+  // Either user or anon
+  userId      String?
+  user        User?    @relation(fields: [userId], references: [id])
+  anonKey     String?
+  
+  @@map("comments")
+}
+
+model Report {
+  id          String   @id @default(cuid())
+  createdAt   DateTime @default(now())
+  
+  postId      String
+  post        Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  reason      String
+  description String?
+  
+  reporterId  String?
+  anonKey     String?
+  status      String   @default("OPEN") // OPEN|REVIEWED|ACTIONED
+  
+  @@map("reports")
+}
